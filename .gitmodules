@@ -1,0 +1,3 @@
+[submodule "dissonance"]
+	path = dissonance
+	url = https://github.com/aatishb/dissonance
