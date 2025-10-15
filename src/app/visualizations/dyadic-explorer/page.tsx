@@ -1,207 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SliderControl } from "@/components/visualizations/SliderControl";
 import type { MouseEvent as ReactMouseEvent } from "react";
-
-function harmonicTonePartials(fundamentalHz: number, numPartials: number, rolloff: number) {
-  const partials: { frequencyHz: number; amplitude: number }[] = [];
-  for (let k = 1; k <= numPartials; k++) {
-    const frequencyHz = k * fundamentalHz;
-    // Use reference implementation: amplitude = 1/k for rolloff=1
-    const amplitude = Math.pow(k, -rolloff);
-    partials.push({ frequencyHz, amplitude });
-  }
-  return partials;
-}
-
-// Convert amplitude to loudness in sones (as in reference implementation)
-function ampToLoudness(amp: number): number {
-  const dB = 20 * Math.log(amp) / Math.log(10);
-  const loudness = Math.pow(2, dB/10) / 16;
-  return loudness;
-}
-
-function dissonance(f1: number, f2: number, l1: number, l2: number): number {
-  // Reference implementation constants
-  const x = 0.24;
-  const s1 = 0.0207;
-  const s2 = 18.96;
-  const fmin = Math.min(f1, f2);
-  const fmax = Math.max(f1, f2);
-  const s = x / (s1 * fmin + s2);
-  const p = s * (fmax - fmin);
-
-  const b1 = 3.51;
-  const b2 = 5.75;
-
-  const l12 = Math.min(l1, l2);
-
-  return l12 * (Math.exp(-b1 * p) - Math.exp(-b2 * p));
-}
-
-function dyadicDissonance(f0: number, ratio: number, numPartials: number, rolloff: number) {
-  const spectrum = harmonicTonePartials(f0, numPartials, rolloff);
-  const freqArray = spectrum.map(p => p.frequencyHz / f0); // Normalize to fundamental
-  const ampArray = spectrum.map(p => p.amplitude);
-  const loudnessArray = ampArray.map(ampToLoudness);
-
-  let dissonanceScore = 0;
-  const numPartialsActual = freqArray.length;
-
-  for (let i = 0; i < numPartialsActual; i++) {
-    for (let j = 0; j < numPartialsActual; j++) {
-      const f1 = f0 * freqArray[i];
-      const f2 = f0 * freqArray[j];
-      const l1 = loudnessArray[i];
-      const l2 = loudnessArray[j];
-      
-      // Apply the same formula as in the reference 2D calculation: 
-      // 0.5*dissonance(f1,f2,l1,l2) + 0.5*dissonance(c*f1,c*f2,l1,l2) + dissonance(f1,c*f2,l1,l2)
-      // where c is the ratio
-      dissonanceScore += 0.5 * dissonance(f1, f2, l1, l2) + 
-                         0.5 * dissonance(ratio * f1, ratio * f2, l1, l2) + 
-                         dissonance(f1, ratio * f2, l1, l2);
-    }
-  }
-  
-  return dissonanceScore / 2; // Also divide by 2 like in reference
-}
-
-const MIN_GAIN = 0.000001;
-const BASE_FADE_IN = 0.002;
-const BASE_RELEASE = 6.91 * 0.5;
-const RELEASE_STAGGER = 6.91 * 0.05;
-const QUICK_RELEASE = 0.12;
-const QUICK_STAGGER = 0.03;
-
-class ReferenceOsc {
-  private readonly osc: OscillatorNode;
-  private readonly gain: GainNode;
-  private scheduledStop: number | null = null;
-
-  constructor(private ctx: AudioContext) {
-    this.osc = ctx.createOscillator();
-    this.osc.type = "sine";
-    this.gain = ctx.createGain();
-    this.gain.gain.value = 0;
-    this.osc.connect(this.gain);
-  }
-
-  connect(dest: AudioNode) {
-    this.gain.connect(dest);
-  }
-
-  disconnect() {
-    try { this.gain.disconnect(); } catch {}
-    try { this.osc.disconnect(); } catch {}
-  }
-
-  start(time: number) {
-    try {
-      this.osc.start(time);
-      this.scheduledStop = null;
-    } catch (error) {
-      if (!(error instanceof DOMException) || error.name !== "InvalidStateError") {
-        throw error;
-      }
-    }
-  }
-
-  stop(time: number) {
-    if (this.scheduledStop !== null && time >= this.scheduledStop - 1e-6) {
-      return;
-    }
-    try {
-      this.osc.stop(time);
-      this.scheduledStop = time;
-    } catch (error) {
-      if (!(error instanceof DOMException) || error.name !== "InvalidStateError") {
-        throw error;
-      }
-    }
-  }
-
-  setFrequencyAtTime(frequency: number, time: number) {
-    this.osc.frequency.setValueAtTime(frequency, time);
-  }
-
-  fadeIn(amplitude: number, targetTime: number) {
-    this.gain.gain.linearRampToValueAtTime(amplitude, targetTime);
-  }
-
-  scheduleFadeOut(targetTime: number) {
-    this.gain.gain.exponentialRampToValueAtTime(MIN_GAIN, targetTime);
-  }
-
-  forceFadeOut(now: number, targetTime: number): number {
-    const safeTarget = Math.max(now + 0.01, targetTime);
-    const param = this.gain.gain;
-    try { param.cancelScheduledValues(now); } catch {}
-    const current = Math.max(param.value, MIN_GAIN);
-    param.setValueAtTime(current, now);
-    param.exponentialRampToValueAtTime(MIN_GAIN, safeTarget);
-    this.stop(safeTarget);
-    return safeTarget;
-  }
-}
-
-class ReferenceSynth {
-  private readonly masterGain: GainNode;
-  private readonly oscillators: ReferenceOsc[];
-
-  constructor(
-    private ctx: AudioContext,
-    private partialMultipliers: number[],
-    private partialAmplitudes: number[]
-  ) {
-    this.masterGain = ctx.createGain();
-    const partialCount = Math.max(partialMultipliers.length, 1);
-    this.masterGain.gain.value = Math.max(1 / partialCount, 0.5);
-    this.oscillators = partialMultipliers.map(() => new ReferenceOsc(ctx));
-    this.oscillators.forEach((osc) => osc.connect(this.masterGain));
-  }
-
-  connect(dest: AudioNode) {
-    this.masterGain.connect(dest);
-  }
-
-  disconnect() {
-    try { this.masterGain.disconnect(); } catch {}
-    this.oscillators.forEach((osc) => osc.disconnect());
-  }
-
-  play(baseFrequency: number, startTime: number): number {
-    if (!this.partialMultipliers.length) {
-      return startTime;
-    }
-
-    this.oscillators.forEach((osc, idx) => {
-      osc.setFrequencyAtTime(baseFrequency * this.partialMultipliers[idx], startTime);
-      osc.start(startTime);
-      osc.fadeIn(this.partialAmplitudes[idx], startTime + BASE_FADE_IN);
-      const releaseMoment = Math.max(startTime, startTime + BASE_RELEASE - RELEASE_STAGGER * idx);
-      osc.scheduleFadeOut(releaseMoment);
-      osc.stop(startTime + BASE_RELEASE);
-    });
-
-    return startTime + BASE_RELEASE;
-  }
-
-  forceSilence(now: number): number {
-    let latest = now;
-    this.oscillators.forEach((osc, idx) => {
-      const releaseMoment = now + QUICK_RELEASE - QUICK_STAGGER * idx;
-      const endTime = osc.forceFadeOut(now, releaseMoment);
-      latest = Math.max(latest, endTime);
-    });
-    return latest;
-  }
-}
-
-type ActiveVoice = {
-  synth: ReferenceSynth;
-  cleanupTimer: ReturnType<typeof setTimeout> | null;
-};
+import { dyadicDissonance, spectrumFromHarmonics } from "@/lib/dissonance/math";
+import { useReferenceTonePlayer } from "@/lib/dissonance/useReferenceTonePlayer";
 
 export default function DyadicExplorerPage() {
   const CHANNEL = "dissonance-audio";
@@ -220,9 +23,7 @@ export default function DyadicExplorerPage() {
   const [selectedRatio, setSelectedRatio] = useState(1.0);
   const [showIntervalGuides, setShowIntervalGuides] = useState(false); // New state for toggle
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const audioRef = useRef<AudioContext | null>(null);
-  const activeVoicesRef = useRef<ActiveVoice[]>([]);
-  // Remove playing state since we're using on-demand sound
+  const { playChord, stopAll } = useReferenceTonePlayer();
 
   // Define interval guides
   const intervalGuides = [
@@ -236,13 +37,14 @@ export default function DyadicExplorerPage() {
     { name: "Octave", ratio: 2, semitones: 12, text: "2:1", flavor: "consonant" as const },
   ];
 
-const samples = useMemo(() => {
+  const samples = useMemo(() => {
+    const spectrum = spectrumFromHarmonics(f0, partials, rolloff);
     const xs: number[] = [];
     const ys: number[] = [];
     for (let i = 0; i <= 240; i++) {
       const ratio = 1 + i * (1 / 240);
       xs.push(ratio);
-      ys.push(dyadicDissonance(f0, ratio, partials, rolloff));
+      ys.push(dyadicDissonance(f0, ratio, spectrum));
     }
     const max = Math.max(...ys);
     const normYs = ys.map((y) => (max > 0 ? y / max : 0));
@@ -260,55 +62,23 @@ const samples = useMemo(() => {
   }, [f0, partials, rolloff]);
 
   const stopAudio = useCallback(() => {
-    const ctx = audioRef.current;
-    const now = ctx?.currentTime ?? 0;
-
-    activeVoicesRef.current.forEach((voice) => {
-      if (voice.cleanupTimer !== null) {
-        clearTimeout(voice.cleanupTimer);
-      }
-
-      const releaseEnd = voice.synth.forceSilence(now);
-      voice.cleanupTimer = window.setTimeout(() => {
-        voice.synth.disconnect();
-        activeVoicesRef.current = activeVoicesRef.current.filter((entry) => entry !== voice);
-      }, Math.max(0, (releaseEnd - now + 0.02) * 1000));
-    });
-  }, []);
+    stopAll();
+  }, [stopAll]);
 
   const playAudio = useCallback(async (baseFreq: number, ratio: number) => {
-    try { new BroadcastChannel(CHANNEL).postMessage({ type: "stop-others", src: SOURCE }); } catch {}
-    if (!audioRef.current || audioRef.current.state === "closed") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const audioContext = window.AudioContext || (window as any).webkitAudioContext;
-      audioRef.current = new audioContext();
-    }
-    const ctx = audioRef.current;
-    if (!ctx) return;
-    try { await ctx.resume(); } catch {}
-
     const partialMultipliers = Array.from({ length: partials }, (_, i) => i + 1);
     const partialAmplitudes = partialMultipliers.map((k) => Math.pow(k, -rolloff));
     if (!partialMultipliers.length) return;
 
-    stopAudio();
-
-    const tuning = [1, ratio];
-    const startTime = ctx.currentTime;
-
-    tuning.forEach((multiplier) => {
-      const synth = new ReferenceSynth(ctx, partialMultipliers, partialAmplitudes);
-      synth.connect(ctx.destination);
-      const voice: ActiveVoice = { synth, cleanupTimer: null };
-      activeVoicesRef.current.push(voice);
-
-      const stopTime = synth.play(baseFreq * multiplier, startTime);
-      voice.cleanupTimer = window.setTimeout(() => {
-        synth.disconnect();
-        activeVoicesRef.current = activeVoicesRef.current.filter((entry) => entry !== voice);
-      }, Math.max(0, (stopTime - startTime + 0.05) * 1000));
+    await playChord({
+      baseFrequency: baseFreq,
+      partialMultipliers,
+      partialAmplitudes,
+      tuning: [1, ratio],
+      channel: CHANNEL,
+      source: SOURCE,
     });
-  }, [partials, rolloff, stopAudio]);
+  }, [partials, rolloff, playChord]);
 
 
 
@@ -408,67 +178,45 @@ const samples = useMemo(() => {
             <h2 className="text-lg font-semibold text-white mb-2">Parameters</h2>
             
             <div className="space-y-5">
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="text-sm font-medium text-gray-300">Base f0 (Hz)</label>
-                  <span className="text-sm font-mono bg-gray-800 px-2 py-1 rounded text-gray-200">{f0}</span>
-                </div>
-                <input 
-                  type="range" 
-                  min={50} 
-                  max={1000} 
-                  value={f0} 
-                  onChange={(e) => setF0(parseFloat(e.target.value))} 
-                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" 
-                />
-              </div>
-              
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="text-sm font-medium text-gray-300">Partials</label>
-                  <span className="text-sm font-mono bg-gray-800 px-2 py-1 rounded text-gray-200">{partials}</span>
-                </div>
-                <input 
-                  type="range" 
-                  min={1} 
-                  max={6} 
-                  value={partials} 
-                  onChange={(e) => setPartials(parseInt(e.target.value))} 
-                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" 
-                />
-              </div>
-              
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="text-sm font-medium text-gray-300">Rolloff</label>
-                  <span className="text-sm font-mono bg-gray-800 px-2 py-1 rounded text-gray-200">{rolloff.toFixed(1)}</span>
-                </div>
-                <input 
-                  type="range" 
-                  min={0.5} 
-                  max={2.5} 
-                  step={0.1} 
-                  value={rolloff} 
-                  onChange={(e) => setRolloff(parseFloat(e.target.value))} 
-                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" 
-                />
-              </div>
-              
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="text-sm font-medium text-gray-300">r (ratio)</label>
-                  <span className="text-sm font-mono bg-gray-800 px-2 py-1 rounded text-gray-200">{selectedRatio.toFixed(3)}×</span>
-                </div>
-                <input 
-                  type="range" 
-                  min={1} 
-                  max={2} 
-                  step={0.001} 
-                  value={selectedRatio} 
-                  onChange={(e) => setSelectedRatio(parseFloat(e.target.value))} 
-                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" 
-                />
-              </div>
+              <SliderControl
+                label="Base f0 (Hz)"
+                value={f0}
+                displayValue={`${f0}`}
+                min={50}
+                max={1000}
+                step={1}
+                onChange={setF0}
+              />
+
+              <SliderControl
+                label="Partials"
+                value={partials}
+                displayValue={`${partials}`}
+                min={1}
+                max={6}
+                step={1}
+                onChange={(value) => setPartials(Math.round(value))}
+              />
+
+              <SliderControl
+                label="Rolloff"
+                value={rolloff}
+                displayValue={rolloff.toFixed(1)}
+                min={0.5}
+                max={2.5}
+                step={0.1}
+                onChange={setRolloff}
+              />
+
+              <SliderControl
+                label="r (ratio)"
+                value={selectedRatio}
+                displayValue={`${selectedRatio.toFixed(3)}×`}
+                min={1}
+                max={2}
+                step={0.001}
+                onChange={setSelectedRatio}
+              />
               
               <div className="pt-2 space-y-3">
                 <div className="flex items-center">
@@ -484,7 +232,7 @@ const samples = useMemo(() => {
                 
                 <div className="flex gap-3 pt-2">
                   <button className="flex-1 py-2 px-4 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-lg font-medium transition-all duration-200 shadow-md hover:shadow-lg" 
-                    onClick={() => playAudio(f0, selectedRatio)}>
+                    onClick={() => { void playAudio(f0, selectedRatio); }}>
                     ▶ Play
                   </button>
                 </div>
@@ -514,7 +262,7 @@ const samples = useMemo(() => {
           <div className="rounded-xl border border-white/10 bg-gradient-to-br from-gray-900 to-gray-950 p-5 shadow-lg">
             <svg ref={svgRef} viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} className="w-full h-[360px] cursor-crosshair"
               onMouseMove={handleMouseMove}
-              onClick={() => playAudio(f0, selectedRatio)}
+              onClick={() => { void playAudio(f0, selectedRatio); }}
             >
               <rect x="0" y="0" width={SVG_WIDTH} height={SVG_HEIGHT} fill="transparent" />
               <defs>
