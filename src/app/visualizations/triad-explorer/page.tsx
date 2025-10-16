@@ -264,6 +264,9 @@ export default function TriadExplorerPage() {
       const Plotly = (plotlyImport.default || plotlyImport) as PlotlyModule;
       if (!container || !isMounted) return;
 
+      const { ratioA: initialRatioA, ratioB: initialRatioB } = latestRatiosRef.current;
+      const initialValue = sampleSurface(surface, initialRatioA, initialRatioB);
+
       const surfaceTrace = {
         type: "surface" as const,
         x: surface.ratios,
@@ -277,9 +280,9 @@ export default function TriadExplorerPage() {
       const markerTrace = {
         type: "scatter3d" as const,
         mode: "markers",
-        x: [ratioA],
-        y: [ratioB],
-        z: [selectedValue],
+        x: [initialRatioA],
+        y: [initialRatioB],
+        z: [initialValue],
         marker: {
           color: "#f97316",
           size: 6,
@@ -451,7 +454,7 @@ export default function TriadExplorerPage() {
         plotlyModule.purge(container);
       }
     };
-  }, [surface, minima, showExampleGuides, exampleTriadSummaries, playTriad, ratioA, ratioB, selectedValue]);
+  }, [surface, minima, showExampleGuides, exampleTriadSummaries]);
 
   // Effect for marker updates (when only the selected point changes)
   useEffect(() => {
