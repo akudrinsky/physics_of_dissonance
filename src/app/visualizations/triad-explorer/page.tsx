@@ -466,7 +466,7 @@ export default function TriadExplorerPage() {
       const container = surfaceRef.current;
       if (!Plotly || !container) return;
 
-      const plotElement = container as PlotlyHTMLElement;
+      const plotElement = container as unknown as PlotlyHTMLElement;
       const markerTraceExists = Array.isArray(plotElement.data) && Boolean(plotElement.data[1]);
       const isValidValue =
         Number.isFinite(ratioA) &&
