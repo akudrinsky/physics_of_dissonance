@@ -131,5 +131,5 @@ export class ReferenceSynth {
 
 export type ActiveVoice = {
   synth: ReferenceSynth;
-  cleanupTimer: ReturnType<typeof setTimeout> | null;
+  cleanupTimer: number | null;
 };

@@ -12,8 +12,8 @@ export default function Home() {
           <Link href="/visualizations/dyadic-explorer" className="px-4 py-2 rounded-md bg-white text-black font-medium">
             Explore dyadic explorer
           </Link>
-          <Link href="/docs" className="px-4 py-2 rounded-md border border-white/20">
-            Read the theory
+          <Link href="/theory" className="px-4 py-2 rounded-md border border-white/20">
+            Theory notes
           </Link>
         </div>
       </section>
@@ -37,6 +37,35 @@ export default function Home() {
             Navigate a 3D consonance surface for three-note chords, spot minima, and audition the richest triads.
           </p>
         </Link>
+      </section>
+
+      <section className="rounded-lg border border-white/10 bg-slate-900/50 p-6 space-y-3">
+        <h2 className="text-xl font-semibold text-white">References &amp; inspiration</h2>
+        <p className="text-sm text-gray-300">
+          These explorations build on the lineage of research and storytelling below:
+        </p>
+        <ul className="space-y-2 text-sm text-gray-300">
+          <li>
+            <a
+              href="https://www.youtube.com/watch?v=tCsl6ZcY9ag"
+              target="_blank"
+              rel="noreferrer"
+              className="underline-offset-4 hover:underline"
+            >
+              minutephysics: The Physics Of Dissonance
+            </a>
+          </li>
+          <li>
+            <a
+              href="https://aatishb.com/dissonance/"
+              target="_blank"
+              rel="noreferrer"
+              className="underline-offset-4 hover:underline"
+            >
+              Aatish Bhatia: Dissonance, A Journey Through Musical Possibility Space
+            </a>
+          </li>
+        </ul>
       </section>
     </div>
   );

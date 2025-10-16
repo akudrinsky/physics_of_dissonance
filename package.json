@@ -33,6 +33,7 @@
     "@types/classnames": "^2.3.4",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^20",
+    "@types/plotly.js": "^3.0.7",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

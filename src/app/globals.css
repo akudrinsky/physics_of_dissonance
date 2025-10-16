@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  background: radial-gradient(1200px 800px at 20% 10%, #111 0%, transparent 60%),
+              radial-gradient(1000px 700px at 80% 20%, #0f172a 0%, transparent 55%),
+              radial-gradient(900px 600px at 50% 90%, #111827 0%, transparent 50%),
+              var(--background);
+  color: var(--foreground);
+}
+
+.prose {
+  color: var(--foreground);
+}
+
+.prose :where(h1,h2,h3,h4){
+  scroll-margin-top: 6rem;
+}
+
+/* KaTeX tweaks */
+.katex-display { overflow: visible; }

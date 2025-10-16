@@ -149,3 +149,12 @@ export function midiToNoteName(midi: number) {
   const note = NOTE_NAMES[((rounded % 12) + 12) % 12];
   return `${note}${octave}`;
 }
+
+export function frequencyToMidi(frequency: number) {
+  return 69 + 12 * Math.log2(frequency / 440);
+}
+
+export function ratioToNoteName(ratio: number, baseFrequency: number) {
+  const midi = frequencyToMidi(baseFrequency * ratio);
+  return midiToNoteName(midi);
+}

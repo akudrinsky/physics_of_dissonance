@@ -245,7 +245,7 @@ export default function DyadicExplorerPage() {
                 {selectedRatio.toFixed(3)}×
               </div>
               <div className="text-center text-sm text-gray-400 mt-2">
-                Roughness: {selectedNormalizedValue.toFixed(2)}
+                Relative dissonance: {selectedNormalizedValue.toFixed(2)}
               </div>
             </div>
           </div>
@@ -327,13 +327,13 @@ export default function DyadicExplorerPage() {
                   <text x={selectedX} y={MARGIN.top - 14} fill="#f1f5f9" fontSize="11" textAnchor="middle">r = {clampedSelectedRatio.toFixed(3)}×</text>
                   <rect x={selectedX - 60} y={selectedY - 34} width="120" height="20" rx="6" fill="#111827" opacity="0.9" />
                   <text x={selectedX} y={selectedY - 20} fill="#f1f5f9" fontSize="10" textAnchor="middle">
-                    Roughness ≈ {selectedNormalizedValue.toFixed(2)}
+                    Relative dissonance ≈ {selectedNormalizedValue.toFixed(2)}
                   </text>
                 </g>
               )}
               {/* Axis labels */}
               <text x={(MARGIN.left + SVG_WIDTH - MARGIN.right) / 2} y={SVG_HEIGHT - 8} fill="#cbd5f5" fontSize="12" textAnchor="middle" fontWeight="600">Interval ratio r</text>
-              <text x={16} y={(MARGIN.top + baselineY) / 2} fill="#cbd5f5" fontSize="12" textAnchor="middle" fontWeight="600" transform={`rotate(-90, 16, ${(MARGIN.top + baselineY) / 2})`}>Normalized roughness</text>
+              <text x={16} y={(MARGIN.top + baselineY) / 2} fill="#cbd5f5" fontSize="12" textAnchor="middle" fontWeight="600" transform={`rotate(-90, 16, ${(MARGIN.top + baselineY) / 2})`}>Relative dissonance index</text>
             </svg>
           </div>
         </div>
