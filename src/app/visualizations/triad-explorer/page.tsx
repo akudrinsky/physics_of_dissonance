@@ -40,6 +40,8 @@ type PlotlyModule = {
 type PlotlyHTMLElement = HTMLElement & {
   on: (event: string, handler: (event: unknown) => void) => void;
   removeAllListeners?: (event?: string) => void;
+  data?: unknown[];
+  layout?: unknown;
 };
 
 const TRIAD_TONE_COLORS = ["#38bdf8", "#fb923c", "#c084fc"] as const;
@@ -449,7 +451,7 @@ export default function TriadExplorerPage() {
         plotlyModule.purge(container);
       }
     };
-  }, [surface, minima, showExampleGuides, exampleTriadSummaries, playTriad]);
+  }, [surface, minima, showExampleGuides, exampleTriadSummaries, playTriad, ratioA, ratioB, selectedValue]);
 
   // Effect for marker updates (when only the selected point changes)
   useEffect(() => {
@@ -461,16 +463,29 @@ export default function TriadExplorerPage() {
       const container = surfaceRef.current;
       if (!Plotly || !container) return;
 
+      const plotElement = container as PlotlyHTMLElement;
+      const markerTraceExists = Array.isArray(plotElement.data) && Boolean(plotElement.data[1]);
+      const isValidValue =
+        Number.isFinite(ratioA) &&
+        Number.isFinite(ratioB) &&
+        Number.isFinite(selectedValue);
+
+      if (!markerTraceExists || !isValidValue) return;
+
       // Update only the marker trace (index 1 in the traces array - the selected chord trace)
-      await Plotly.restyle(
-        container,
-        {
-          x: [[ratioA]],
-          y: [[ratioB]],
-          z: [[selectedValue]]
-        },
-        [1] // Update only the second trace (marker trace at index 1)
-      );
+      try {
+        await Plotly.restyle(
+          container,
+          {
+            x: [[ratioA]],
+            y: [[ratioB]],
+            z: [[selectedValue]]
+          },
+          [1] // Update only the second trace (marker trace at index 1)
+        );
+      } catch (error) {
+        console.warn("Failed to update triad marker, skipping frame", error);
+      }
     };
 
     updateMarker();
