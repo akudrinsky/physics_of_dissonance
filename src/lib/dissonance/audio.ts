@@ -83,11 +83,14 @@ export class ReferenceSynth {
   constructor(
     private ctx: AudioContext,
     private partialMultipliers: number[],
-    private partialAmplitudes: number[]
+    private partialAmplitudes: number[],
+    voiceCount: number
   ) {
     this.masterGain = ctx.createGain();
     const partialCount = Math.max(partialMultipliers.length, 1);
-    this.masterGain.gain.value = Math.max(1 / partialCount, 0.5);
+    const totalVoices = Math.max(voiceCount, 1);
+    const baseGain = Math.max(1 / partialCount, 0.5);
+    this.masterGain.gain.value = baseGain / totalVoices;
     this.oscillators = partialMultipliers.map(() => new ReferenceOsc(ctx));
     this.oscillators.forEach((osc) => osc.connect(this.masterGain));
   }

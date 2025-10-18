@@ -52,8 +52,9 @@ export function useReferenceTonePlayer() {
 
     const startTime = ctx.currentTime;
 
+    const voiceCount = Math.max(tuning.length, 1);
     tuning.forEach((multiplier) => {
-      const synth = new ReferenceSynth(ctx, partialMultipliers, partialAmplitudes);
+      const synth = new ReferenceSynth(ctx, partialMultipliers, partialAmplitudes, voiceCount);
       synth.connect(ctx.destination);
       const voice: ActiveVoice = { synth, cleanupTimer: null };
       activeVoicesRef.current.push(voice);
